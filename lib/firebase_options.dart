@@ -15,34 +15,37 @@ class DefaultFirebaseOptions {
     }
   }
 
-  // TODO: Replace ALL values below with your real Firebase project config.
-  // Run: flutterfire configure
-  // Or copy from Firebase Console → Project Settings → Your apps.
-
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'YOUR_WEB_API_KEY',
-    appId: 'YOUR_WEB_APP_ID',
-    messagingSenderId: 'YOUR_SENDER_ID',
-    projectId: 'YOUR_PROJECT_ID',
-    authDomain: 'YOUR_PROJECT_ID.firebaseapp.com',
-    storageBucket: 'YOUR_PROJECT_ID.appspot.com',
+    apiKey: 'AIzaSyD6tswgwEL-2hEjL-_-Qub4uP5PdMEWNoo',
+    appId: '1:994797339321:web:c5b9be894c57f8c4489168',
+    messagingSenderId: '994797339321',
+    projectId: 'rentrecipy',
+    authDomain: 'rentrecipy.firebaseapp.com',
+    storageBucket: 'rentrecipy.firebasestorage.app',
+    measurementId: 'G-XKXW98DE8H',
   );
 
+  // TODO: In Firebase Console → Project Settings → Add Android app
+  // Package name: com.example.rent_receipt_manager
+  // Then replace the appId below with the one from google-services.json.
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'YOUR_ANDROID_API_KEY',
-    appId: 'YOUR_ANDROID_APP_ID',
-    messagingSenderId: 'YOUR_SENDER_ID',
-    projectId: 'YOUR_PROJECT_ID',
-    storageBucket: 'YOUR_PROJECT_ID.appspot.com',
+    apiKey: 'AIzaSyD6tswgwEL-2hEjL-_-Qub4uP5PdMEWNoo',
+    appId: '1:994797339321:android:REPLACE_WITH_ANDROID_APP_ID',
+    messagingSenderId: '994797339321',
+    projectId: 'rentrecipy',
+    storageBucket: 'rentrecipy.firebasestorage.app',
   );
 
+  // TODO: In Firebase Console → Project Settings → Add iOS app
+  // Bundle ID: com.example.rentReceiptManager
+  // Then replace the appId and iosClientId below.
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'YOUR_IOS_API_KEY',
-    appId: 'YOUR_IOS_APP_ID',
-    messagingSenderId: 'YOUR_SENDER_ID',
-    projectId: 'YOUR_PROJECT_ID',
-    storageBucket: 'YOUR_PROJECT_ID.appspot.com',
-    iosClientId: 'YOUR_IOS_CLIENT_ID',
+    apiKey: 'AIzaSyD6tswgwEL-2hEjL-_-Qub4uP5PdMEWNoo',
+    appId: '1:994797339321:ios:REPLACE_WITH_IOS_APP_ID',
+    messagingSenderId: '994797339321',
+    projectId: 'rentrecipy',
+    storageBucket: 'rentrecipy.firebasestorage.app',
+    iosClientId: 'REPLACE_WITH_IOS_CLIENT_ID',
     iosBundleId: 'com.example.rentReceiptManager',
   );
 }
