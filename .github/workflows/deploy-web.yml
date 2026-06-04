@@ -5,7 +5,7 @@ on:
     branches:
       - claude/rent-receipt-manager-flutter-qzYhW
       - main
-  workflow_dispatch:   # run manually from GitHub mobile app any time
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -31,21 +31,15 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Enable web & generate web/ folder
-        run: |
-          flutter config --enable-web
-          # Create the web/ scaffold if it doesn't already exist
-          flutter create --platforms web . 2>/dev/null || true
+      - name: Enable Flutter web
+        run: flutter config --enable-web
 
       - name: Flutter pub get
         run: flutter pub get
 
-      # base-href must match the GitHub Pages sub-path:
-      # https://karthickravi94.github.io/rent-receipts-/
       - name: Build Flutter Web
         run: flutter build web --release --base-href "/rent-receipts-/"
 
-      # Deploy to gh-pages branch (auto-creates the branch)
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
