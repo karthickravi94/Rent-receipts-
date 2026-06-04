@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: write
+  pages: write
 
 jobs:
   build-and-deploy:
@@ -34,10 +35,35 @@ jobs:
       - name: Build Flutter Web
         run: flutter build web --release --base-href "/rent-receipts-/"
 
-      - name: Deploy to GitHub Pages
+      - name: Deploy to gh-pages branch
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./build/web
           publish_branch: gh-pages
           force_orphan: true
+
+      - name: Ensure Pages is configured to serve from gh-pages
+        uses: actions/github-script@v7
+        continue-on-error: true
+        with:
+          script: |
+            try {
+              await github.rest.repos.updateInformationAboutPagesSite({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                source: { branch: 'gh-pages', path: '/' }
+              });
+              core.info('Pages source set to gh-pages branch');
+            } catch (e) {
+              if (e.status === 404) {
+                await github.rest.repos.createPagesSite({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  source: { branch: 'gh-pages', path: '/' }
+                });
+                core.info('Pages created with gh-pages branch');
+              } else {
+                core.warning('Pages config: ' + e.message);
+              }
+            }
