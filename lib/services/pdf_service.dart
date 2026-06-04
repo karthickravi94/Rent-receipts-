@@ -1,6 +1,5 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import '../models/receipt.dart';
@@ -12,7 +11,8 @@ class PdfService {
 
   final _currency = NumberFormat.currency(locale: 'en_IN', symbol: '₹');
 
-  Future<File> generateReceipt(
+  // Returns raw PDF bytes — works on web, Android, and iOS.
+  Future<Uint8List> generateReceipt(
       Receipt receipt, String adminName, String adminPhone) async {
     final pdf = pw.Document();
 
@@ -38,12 +38,10 @@ class PdfService {
             _chargesTable(receipt),
             pw.SizedBox(height: 14),
             _totalBox(receipt),
-            if (receipt.gpayNumber.isNotEmpty || receipt.phonePeNumber.isNotEmpty) ...
-              [pw.SizedBox(height: 12), _paymentDetails(receipt)],
-            if (receipt.advanceAmount > 0) ...
-              [pw.SizedBox(height: 12), _advanceInfo(receipt)],
-            if (receipt.notes.isNotEmpty) ...
-              [pw.SizedBox(height: 12), _notes(receipt)],
+            if (receipt.gpayNumber.isNotEmpty ||
+                receipt.phonePeNumber.isNotEmpty) ...[pw.SizedBox(height: 12), _paymentDetails(receipt)],
+            if (receipt.advanceAmount > 0) ...[pw.SizedBox(height: 12), _advanceInfo(receipt)],
+            if (receipt.notes.isNotEmpty) ...[pw.SizedBox(height: 12), _notes(receipt)],
             pw.SizedBox(height: 24),
             _divider(),
             pw.SizedBox(height: 16),
@@ -53,15 +51,7 @@ class PdfService {
       ),
     );
 
-    final dir = await getApplicationDocumentsDirectory();
-    final receiptsDir = Directory('${dir.path}/receipts');
-    if (!receiptsDir.existsSync()) receiptsDir.createSync(recursive: true);
-
-    final safeName = receipt.tenantName.replaceAll(RegExp(r'[^\w]'), '_');
-    final file = File(
-        '${receiptsDir.path}/receipt_${safeName}_${receipt.month}_${receipt.year}_${receipt.id.substring(0, 6)}.pdf');
-    await file.writeAsBytes(await pdf.save());
-    return file;
+    return pdf.save();
   }
 
   pw.Widget _header(String name, String phone) => pw.Container(
@@ -117,8 +107,7 @@ class PdfService {
           ),
           pw.SizedBox(height: 4),
           pw.Center(
-            child: pw.Text(
-                'For the month of ${receipt.month} ${receipt.year}',
+            child: pw.Text('For the month of ${receipt.month} ${receipt.year}',
                 style: const pw.TextStyle(
                     fontSize: 12, color: PdfColors.grey700)),
           ),
@@ -128,16 +117,17 @@ class PdfService {
   pw.Widget _receiptMeta(Receipt receipt) => pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          pw.Text(
-              'Receipt No: #${receipt.id.substring(0, 8).toUpperCase()}',
-              style:
-                  const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
-          pw.Text(
-              'Date: ${DateFormat('dd MMM yyyy').format(receipt.generatedAt)}',
-              style:
-                  const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+          pw.Text('Receipt No: #${receipt.id.substring(0, 8).toUpperCase()}',
+              style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+          pw.Text('Date: ${_formatDate(receipt.generatedAt)}',
+              style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
         ],
       );
+
+  String _formatDate(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')} '
+      '${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.month - 1]} '
+      '${d.year}';
 
   pw.Widget _infoSection(Receipt receipt) => pw.Container(
         padding: const pw.EdgeInsets.all(12),
@@ -174,8 +164,7 @@ class PdfService {
                   _sectionLabel('PROPERTY DETAILS'),
                   pw.SizedBox(height: 6),
                   _infoRow('Property', receipt.houseName),
-                  _infoRow('Period',
-                      '${receipt.month} ${receipt.year}'),
+                  _infoRow('Period', '${receipt.month} ${receipt.year}'),
                 ],
               ),
             ),
@@ -209,19 +198,15 @@ class PdfService {
 
   pw.Widget _chargesTable(Receipt receipt) {
     final rows = <pw.TableRow>[_tableHeader()];
-    void addRow(String label, double amount, bool alt) {
-      if (amount > 0) rows.add(_tableRow(label, amount, alt));
+    void add(String label, double amount) {
+      if (amount > 0) rows.add(_tableRow(label, amount, rows.length.isOdd));
     }
 
-    addRow('Base Rent', receipt.rentAmount, false);
-    if (receipt.milkCharge > 0)
-      addRow('Milk Charge', receipt.milkCharge, rows.length.isOdd);
-    if (receipt.electricityCharge > 0)
-      addRow('Electricity', receipt.electricityCharge, rows.length.isOdd);
-    if (receipt.waterCharge > 0)
-      addRow('Water Charge', receipt.waterCharge, rows.length.isOdd);
-    if (receipt.otherCharges > 0)
-      addRow('Other Charges', receipt.otherCharges, rows.length.isOdd);
+    add('Base Rent', receipt.rentAmount);
+    add('Milk Charge', receipt.milkCharge);
+    add('Electricity', receipt.electricityCharge);
+    add('Water Charge', receipt.waterCharge);
+    add('Other Charges', receipt.otherCharges);
 
     return pw.Table(
       border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
@@ -243,8 +228,8 @@ class PdfService {
 
   pw.TableRow _tableRow(String desc, double amount, bool alt) =>
       pw.TableRow(
-        decoration:
-            pw.BoxDecoration(color: alt ? PdfColors.indigo50 : PdfColors.white),
+        decoration: pw.BoxDecoration(
+            color: alt ? PdfColors.indigo50 : PdfColors.white),
         children: [
           _cell(desc),
           _cell(_currency.format(amount), right: true),
@@ -253,8 +238,7 @@ class PdfService {
 
   pw.Widget _cell(String text, {bool isHeader = false, bool right = false}) =>
       pw.Container(
-        padding:
-            const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         alignment:
             right ? pw.Alignment.centerRight : pw.Alignment.centerLeft,
         child: pw.Text(text,
@@ -266,7 +250,8 @@ class PdfService {
       );
 
   pw.Widget _totalBox(Receipt receipt) => pw.Container(
-        padding: const pw.EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding:
+            const pw.EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: pw.BoxDecoration(
           color: PdfColors.indigo800,
           borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
@@ -400,12 +385,12 @@ class PdfService {
   pw.Widget _footer() => pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          _signatureBlock('Tenant Signature'),
-          _signatureBlock('Landlord Signature'),
+          _sig('Tenant Signature'),
+          _sig('Landlord Signature'),
         ],
       );
 
-  pw.Widget _signatureBlock(String label) => pw.Column(
+  pw.Widget _sig(String label) => pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.center,
         children: [
           pw.Text(label,

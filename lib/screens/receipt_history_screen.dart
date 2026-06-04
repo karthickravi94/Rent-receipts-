@@ -28,12 +28,9 @@ class _ReceiptHistoryScreenState extends State<ReceiptHistoryScreen> {
       if (_filterMonth != null && r.month != _filterMonth) return false;
       if (_filterYear != null && r.year != _filterYear) return false;
       if (_search.isNotEmpty &&
-          !r.tenantName
-              .toLowerCase()
-              .contains(_search.toLowerCase()) &&
-          !r.houseName
-              .toLowerCase()
-              .contains(_search.toLowerCase())) return false;
+          !r.tenantName.toLowerCase().contains(_search.toLowerCase()) &&
+          !r.houseName.toLowerCase().contains(_search.toLowerCase()))
+        return false;
       return true;
     }).toList();
 
@@ -60,15 +57,14 @@ class _ReceiptHistoryScreenState extends State<ReceiptHistoryScreen> {
       ),
       body: Column(
         children: [
-          // Active filters chips
           if (_filterMonth != null || _filterYear != null)
             Padding(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
               child: Row(
                 children: [
-                  const Text('Filters: ',
+                  const Text('Filters:',
                       style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 8),
                   if (_filterMonth != null)
                     Chip(
                       label: Text(_filterMonth!),
@@ -93,44 +89,41 @@ class _ReceiptHistoryScreenState extends State<ReceiptHistoryScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          Icons.receipt_long_outlined,
-                          size: 72,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurfaceVariant
-                              .withOpacity(0.4),
-                        ),
+                        Icon(Icons.receipt_long_outlined,
+                            size: 72,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant
+                                .withOpacity(0.4)),
                         const SizedBox(height: 12),
                         const Text('No receipts found'),
                       ],
                     ),
                   )
                 : ListView.builder(
-                    padding: const EdgeInsets.only(top: 8, bottom: 16),
+                    padding:
+                        const EdgeInsets.only(top: 8, bottom: 16),
                     itemCount: filtered.length,
                     itemBuilder: (ctx, i) {
                       final receipt = filtered[i];
                       return ReceiptCard(
                         receipt: receipt,
                         onView: () async {
-                          final pdf = await provider.regeneratePdf(
-                            receipt,
-                            settings.adminName,
-                            settings.adminPhone,
-                          );
-                          if (pdf != null) {
-                            // Open file
+                          final bytes = await provider.regeneratePdf(
+                              receipt,
+                              settings.adminName,
+                              settings.adminPhone);
+                          if (bytes != null) {
+                            provider.downloadOrShare(bytes);
                           }
                         },
                         onShare: () async {
-                          final pdf = await provider.regeneratePdf(
-                            receipt,
-                            settings.adminName,
-                            settings.adminPhone,
-                          );
-                          if (pdf != null && context.mounted) {
-                            provider.shareFile(pdf);
+                          final bytes = await provider.regeneratePdf(
+                              receipt,
+                              settings.adminName,
+                              settings.adminPhone);
+                          if (bytes != null) {
+                            provider.downloadOrShare(bytes);
                           }
                         },
                         onDelete: () =>
@@ -144,8 +137,7 @@ class _ReceiptHistoryScreenState extends State<ReceiptHistoryScreen> {
     );
   }
 
-  Future<void> _showFilter(
-      BuildContext context, DateTime now) async {
+  Future<void> _showFilter(BuildContext context, DateTime now) async {
     await showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -174,7 +166,8 @@ class _ReceiptHistoryScreenState extends State<ReceiptHistoryScreen> {
                           label: Text(m),
                           selected: _filterMonth == m,
                           onSelected: (s) {
-                            setModal(() => _filterMonth = s ? m : null);
+                            setModal(
+                                () => _filterMonth = s ? m : null);
                             setState(() {});
                           },
                         ))

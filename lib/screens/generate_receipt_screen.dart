@@ -1,8 +1,7 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
-import 'package:open_file/open_file.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import '../models/tenant.dart';
@@ -32,8 +31,6 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
   final _water = TextEditingController();
   final _other = TextEditingController();
   final _notes = TextEditingController();
-
-  File? _generatedPdf;
 
   @override
   void initState() {
@@ -73,7 +70,7 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
     final settings = context.read<SettingsProvider>();
     final receiptProvider = context.read<ReceiptProvider>();
 
-    final pdf = await receiptProvider.generateAndSave(
+    final bytes = await receiptProvider.generateAndSave(
       tenant: _selectedTenant!,
       milkCharge: double.tryParse(_milk.text) ?? 0,
       electricityCharge: double.tryParse(_electricity.text) ?? 0,
@@ -87,9 +84,8 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
       receiptId: const Uuid().v4(),
     );
 
-    if (pdf != null && mounted) {
-      setState(() => _generatedPdf = pdf);
-      _showSuccessSheet(pdf);
+    if (bytes != null && mounted) {
+      _showSuccessSheet(bytes);
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -99,20 +95,30 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
     }
   }
 
-  void _showSuccessSheet(File pdf) {
+  void _showSuccessSheet(Uint8List bytes) {
     final receiptProvider = context.read<ReceiptProvider>();
+    final fmt = NumberFormat.currency(locale: 'en_IN', symbol: '₹');
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+          borderRadius:
+              BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.check_circle,
-                color: Colors.green, size: 64),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2)),
+            ),
+            const SizedBox(height: 20),
+            const Icon(Icons.check_circle, color: Colors.green, size: 64),
             const SizedBox(height: 12),
             Text('Receipt Generated!',
                 style: Theme.of(context)
@@ -121,65 +127,53 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
                     ?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 4),
             Text(
-              'For ${_selectedTenant!.name} – $_selectedMonth $_selectedYear',
-              style: Theme.of(context).textTheme.bodyMedium,
+              '${_selectedTenant!.name} – $_selectedMonth $_selectedYear',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
             Text(
-              NumberFormat.currency(locale: 'en_IN', symbol: '₹')
-                  .format(_total),
+              fmt.format(_total),
               style: Theme.of(context)
                   .textTheme
                   .headlineMedium
                   ?.copyWith(fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 24),
-            // Action buttons
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => OpenFile.open(pdf.path),
-                    icon: const Icon(Icons.picture_as_pdf),
-                    label: const Text('View PDF'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      receiptProvider.shareFile(pdf);
-                    },
-                    icon: const Icon(Icons.share),
-                    label: const Text('Share'),
-                  ),
-                ),
-              ],
+            const SizedBox(height: 28),
+
+            // Download / Print PDF
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () =>
+                    receiptProvider.downloadOrShare(bytes),
+                icon: const Icon(Icons.download),
+                label: const Text('Download / Print PDF'),
+              ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
+
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () {
                       Navigator.pop(ctx);
-                      if (_selectedTenant!.email.isNotEmpty) {
-                        final latestReceipt =
-                            receiptProvider.receipts.first;
+                      final receipts = receiptProvider.receipts;
+                      if (receipts.isNotEmpty &&
+                          _selectedTenant!.email.isNotEmpty) {
                         receiptProvider.shareViaEmail(
-                            pdf,
-                            latestReceipt,
-                            _selectedTenant!.email);
-                      } else {
+                            receipts.first, _selectedTenant!.email);
+                      } else if (_selectedTenant!.email.isEmpty) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                               content: Text(
-                                  'No email address for this tenant.')),
+                                  'No email saved for this tenant.')),
                         );
                       }
                     },
-                    icon: const Icon(Icons.email),
+                    icon: const Icon(Icons.email_outlined),
                     label: const Text('Email'),
                   ),
                 ),
@@ -188,16 +182,18 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
                   child: OutlinedButton.icon(
                     onPressed: () {
                       Navigator.pop(ctx);
-                      receiptProvider.shareViaWhatsApp(
-                          pdf, _selectedTenant!.phone);
+                      final receipts = receiptProvider.receipts;
+                      if (receipts.isNotEmpty) {
+                        receiptProvider.openWhatsApp(
+                            _selectedTenant!.phone, receipts.first);
+                      }
                     },
-                    icon: const Icon(Icons.chat),
+                    icon: const Icon(Icons.chat_outlined),
                     label: const Text('WhatsApp'),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
           ],
         ),
       ),
@@ -209,8 +205,7 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
     final tenants = context.watch<TenantProvider>().tenants;
     final isGenerating =
         context.watch<ReceiptProvider>().isGenerating;
-    final fmt =
-        NumberFormat.currency(locale: 'en_IN', symbol: '₹');
+    final fmt = NumberFormat.currency(locale: 'en_IN', symbol: '₹');
     final now = DateTime.now();
 
     return Scaffold(
@@ -220,21 +215,14 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // Tenant Selector
+            // Tenant
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Select Tenant',
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleSmall
-                            ?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context).colorScheme.primary,
-                            )),
+                    _sectionTitle('Select Tenant'),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<Tenant>(
                       value: _selectedTenant,
@@ -242,12 +230,11 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
                         labelText: 'Tenant *',
                         prefixIcon: Icon(Icons.person),
                       ),
-                      items: tenants.map((t) {
-                        return DropdownMenuItem(
-                          value: t,
-                          child: Text('${t.name} – ${t.houseName}'),
-                        );
-                      }).toList(),
+                      items: tenants
+                          .map((t) => DropdownMenuItem(
+                              value: t,
+                              child: Text('${t.name} – ${t.houseName}')))
+                          .toList(),
                       onChanged: (t) =>
                           setState(() => _selectedTenant = t),
                       validator: (v) =>
@@ -259,21 +246,14 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
             ),
             const SizedBox(height: 12),
 
-            // Period Selector
+            // Period
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Billing Period',
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleSmall
-                            ?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context).colorScheme.primary,
-                            )),
+                    _sectionTitle('Billing Period'),
                     const SizedBox(height: 12),
                     Row(
                       children: [
@@ -281,14 +261,14 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
                           flex: 2,
                           child: DropdownButtonFormField<String>(
                             value: _selectedMonth,
-                            decoration: const InputDecoration(
-                                labelText: 'Month'),
+                            decoration:
+                                const InputDecoration(labelText: 'Month'),
                             items: AppConstants.months
                                 .map((m) => DropdownMenuItem(
                                     value: m, child: Text(m)))
                                 .toList(),
-                            onChanged: (m) => setState(
-                                () => _selectedMonth = m!),
+                            onChanged: (m) =>
+                                setState(() => _selectedMonth = m!),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -324,46 +304,40 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Charges',
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleSmall
-                            ?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context).colorScheme.primary,
-                            )),
+                    _sectionTitle('Charges'),
                     const SizedBox(height: 12),
-                    // Rent amount (read-only)
-                    if (_selectedTenant != null)
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .primaryContainer
-                              .withOpacity(0.3),
-                          borderRadius: BorderRadius.circular(8),
+                    if (_selectedTenant != null) ...
+                      [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .primaryContainer
+                                .withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisAlignment:
+                                MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Base Rent'),
+                              Text(
+                                fmt.format(
+                                    _selectedTenant!.monthlyRent),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
                         ),
-                        child: Row(
-                          mainAxisAlignment:
-                              MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text('Base Rent'),
-                            Text(
-                              fmt.format(_selectedTenant!.monthlyRent),
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-                      ),
-                    if (_selectedTenant != null)
-                      const SizedBox(height: 12),
+                        const SizedBox(height: 12),
+                      ],
                     CustomTextField(
                       label: 'Milk Charge (₹)',
                       controller: _milk,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
                       prefixIcon: const Icon(Icons.local_drink),
                       inputFormatters: [
                         FilteringTextInputFormatter.allow(
@@ -375,8 +349,8 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
                     CustomTextField(
                       label: 'Electricity Charge (₹)',
                       controller: _electricity,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
                       prefixIcon: const Icon(Icons.electric_bolt),
                       inputFormatters: [
                         FilteringTextInputFormatter.allow(
@@ -388,8 +362,8 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
                     CustomTextField(
                       label: 'Water Charge (₹)',
                       controller: _water,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
                       prefixIcon: const Icon(Icons.water_drop),
                       inputFormatters: [
                         FilteringTextInputFormatter.allow(
@@ -401,9 +375,10 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
                     CustomTextField(
                       label: 'Other Charges (₹)',
                       controller: _other,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
-                      prefixIcon: const Icon(Icons.miscellaneous_services),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      prefixIcon:
+                          const Icon(Icons.miscellaneous_services),
                       inputFormatters: [
                         FilteringTextInputFormatter.allow(
                             RegExp(r'\d+\.?\d*'))
@@ -418,38 +393,33 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
                       prefixIcon: const Icon(Icons.note),
                     ),
                     const SizedBox(height: 16),
-                    // Total Preview
+                    // Live total
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color:
-                            Theme.of(context).colorScheme.primaryContainer,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .primaryContainer,
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Row(
                         mainAxisAlignment:
                             MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            'TOTAL',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onPrimaryContainer,
-                            ),
-                          ),
-                          Text(
-                            fmt.format(_total),
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onPrimaryContainer,
-                            ),
-                          ),
+                          Text('TOTAL',
+                              style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onPrimaryContainer)),
+                          Text(fmt.format(_total),
+                              style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onPrimaryContainer)),
                         ],
                       ),
                     ),
@@ -458,6 +428,7 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
               ),
             ),
             const SizedBox(height: 20),
+
             ElevatedButton.icon(
               onPressed: isGenerating ? null : _generate,
               icon: isGenerating
@@ -476,4 +447,12 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
       ),
     );
   }
+
+  Widget _sectionTitle(String text) => Text(
+        text,
+        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+      );
 }

@@ -1,6 +1,6 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:printing/printing.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/receipt.dart';
 import '../models/tenant.dart';
@@ -14,12 +14,14 @@ class ReceiptProvider extends ChangeNotifier {
   List<Receipt> _receipts = [];
   bool _isGenerating = false;
   String? _error;
-  File? _lastGeneratedPdf;
+  Uint8List? _lastPdfBytes;
+  String _lastPdfFilename = 'rent_receipt.pdf';
 
   List<Receipt> get receipts => _receipts;
   bool get isGenerating => _isGenerating;
   String? get error => _error;
-  File? get lastGeneratedPdf => _lastGeneratedPdf;
+  Uint8List? get lastPdfBytes => _lastPdfBytes;
+  String get lastPdfFilename => _lastPdfFilename;
 
   ReceiptProvider() {
     _firestoreService.getReceipts().listen(
@@ -34,7 +36,7 @@ class ReceiptProvider extends ChangeNotifier {
     );
   }
 
-  Future<File?> generateAndSave({
+  Future<Uint8List?> generateAndSave({
     required Tenant tenant,
     required double milkCharge,
     required double electricityCharge,
@@ -81,9 +83,14 @@ class ReceiptProvider extends ChangeNotifier {
       );
 
       await _firestoreService.addReceipt(receipt);
-      final pdf = await _pdfService.generateReceipt(receipt, adminName, adminPhone);
-      _lastGeneratedPdf = pdf;
-      return pdf;
+
+      final safeName = tenant.name.replaceAll(RegExp(r'[^\w]'), '_');
+      _lastPdfFilename = 'receipt_${safeName}_${month}_$year.pdf';
+
+      final bytes =
+          await _pdfService.generateReceipt(receipt, adminName, adminPhone);
+      _lastPdfBytes = bytes;
+      return bytes;
     } catch (e) {
       _error = e.toString();
       return null;
@@ -93,15 +100,19 @@ class ReceiptProvider extends ChangeNotifier {
     }
   }
 
-  Future<File?> regeneratePdf(
+  Future<Uint8List?> regeneratePdf(
       Receipt receipt, String adminName, String adminPhone) async {
     try {
       _isGenerating = true;
       notifyListeners();
-      final pdf =
+      final bytes =
           await _pdfService.generateReceipt(receipt, adminName, adminPhone);
-      _lastGeneratedPdf = pdf;
-      return pdf;
+      _lastPdfBytes = bytes;
+      final safeName =
+          receipt.tenantName.replaceAll(RegExp(r'[^\w]'), '_');
+      _lastPdfFilename =
+          'receipt_${safeName}_${receipt.month}_${receipt.year}.pdf';
+      return bytes;
     } catch (e) {
       _error = e.toString();
       return null;
@@ -111,36 +122,43 @@ class ReceiptProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> shareFile(File pdfFile, {String? subject}) async {
-    await Share.shareXFiles(
-      [XFile(pdfFile.path)],
-      subject: subject ?? 'Rent Receipt',
-      text: 'Please find your rent receipt attached.',
+  // Works on all platforms:
+  //   Web   → downloads the PDF file to the browser downloads folder
+  //   Mobile → opens native share sheet (WhatsApp, Drive, Email, etc.)
+  Future<void> downloadOrShare(Uint8List bytes, {String? filename}) async {
+    await Printing.sharePdf(
+      bytes: bytes,
+      filename: filename ?? _lastPdfFilename,
     );
   }
 
-  Future<void> shareViaEmail(
-      File pdfFile, Receipt receipt, String email) async {
+  // Opens the device/browser mail client with pre-filled subject & body.
+  Future<void> shareViaEmail(Receipt receipt, String email) async {
     final uri = Uri(
       scheme: 'mailto',
       path: email,
       queryParameters: {
         'subject': 'Rent Receipt – ${receipt.month} ${receipt.year}',
         'body':
-            'Dear ${receipt.tenantName},\n\nPlease find your rent receipt for ${receipt.month} ${receipt.year} attached.\n\nTotal Amount Due: ₹${receipt.totalAmount.toStringAsFixed(2)}\n\nRegards',
+            'Dear ${receipt.tenantName},\n\n'
+            'Please find your rent receipt for ${receipt.month} ${receipt.year}.\n\n'
+            'Total Amount Due: ₹${receipt.totalAmount.toStringAsFixed(2)}\n\n'
+            'Regards',
       },
     );
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
-    } else {
-      await shareFile(pdfFile,
-          subject: 'Rent Receipt – ${receipt.month} ${receipt.year}');
-    }
+    if (await canLaunchUrl(uri)) await launchUrl(uri);
   }
 
-  Future<void> shareViaWhatsApp(File pdfFile, String phone) async {
-    // Opens the native share sheet which includes WhatsApp.
-    await shareFile(pdfFile);
+  // On web: opens WhatsApp Web. On mobile: opens WhatsApp app.
+  Future<void> openWhatsApp(String phone, Receipt receipt) async {
+    final msg = Uri.encodeComponent(
+        'Hi ${receipt.tenantName}, your rent receipt for '
+        '${receipt.month} ${receipt.year} is ready. '
+        'Total: ₹${receipt.totalAmount.toStringAsFixed(2)}');
+    final uri = Uri.parse('https://wa.me/$phone?text=$msg');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 
   Future<bool> deleteReceipt(String id) async {
