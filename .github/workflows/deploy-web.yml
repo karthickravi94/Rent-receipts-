@@ -1,0 +1,56 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - claude/rent-receipt-manager-flutter-qzYhW
+      - main
+  workflow_dispatch:   # run manually from GitHub mobile app any time
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.3'
+          channel: stable
+          cache: true
+
+      - name: Enable web & generate web/ folder
+        run: |
+          flutter config --enable-web
+          # Create the web/ scaffold if it doesn't already exist
+          flutter create --platforms web . 2>/dev/null || true
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      # base-href must match the GitHub Pages sub-path:
+      # https://karthickravi94.github.io/rent-receipts-/
+      - name: Build Flutter Web
+        run: flutter build web --release --base-href "/rent-receipts-/"
+
+      # Deploy to gh-pages branch (auto-creates the branch)
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./build/web
+          publish_branch: gh-pages
+          force_orphan: true
+          commit_message: 'deploy: update web build'
