@@ -7,11 +7,21 @@ import 'providers/tenant_provider.dart';
 import 'providers/receipt_provider.dart';
 import 'providers/settings_provider.dart';
 
+bool firebaseReady = false;
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    firebaseReady = true;
+  } catch (e) {
+    // Firebase not configured yet — app runs in offline/demo mode.
+    debugPrint('Firebase not configured: $e');
+  }
+
   runApp(
     MultiProvider(
       providers: [

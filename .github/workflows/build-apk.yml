@@ -1,0 +1,73 @@
+name: Build Debug APK
+
+on:
+  push:
+    branches:
+      - 'claude/**'
+      - main
+  workflow_dispatch:   # lets you trigger manually from GitHub mobile app
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.3'
+          channel: stable
+          cache: true
+
+      # Create a placeholder google-services.json so the build compiles.
+      # The app handles Firebase init failure gracefully at runtime.
+      - name: Create placeholder google-services.json
+        run: |
+          mkdir -p android/app
+          cat > android/app/google-services.json <<'GSJSON'
+          {
+            "project_info": {
+              "project_number": "000000000000",
+              "project_id": "rent-receipt-placeholder",
+              "storage_bucket": "rent-receipt-placeholder.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
+                  "android_client_info": {
+                    "package_name": "com.example.rent_receipt_manager"
+                  }
+                },
+                "oauth_client": [],
+                "api_key": [{"current_key": "AIzaSyPlaceholderKeyForBuildOnly"}],
+                "services": {
+                  "appinvite_service": {"other_platform_oauth_client": []}
+                }
+              }
+            ],
+            "configuration_version": "1"
+          }
+          GSJSON
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Build debug APK
+        run: flutter build apk --debug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: rent-receipt-manager-debug
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 30
