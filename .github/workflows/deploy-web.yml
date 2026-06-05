@@ -33,7 +33,7 @@ jobs:
         run: flutter pub get
 
       - name: Build Flutter Web
-        run: flutter build web --release --base-href "/rent-receipts-/"
+        run: flutter build web --release --base-href "/Rent-receipts-/"
 
       - name: Deploy to gh-pages branch
         uses: peaceiris/actions-gh-pages@v4
