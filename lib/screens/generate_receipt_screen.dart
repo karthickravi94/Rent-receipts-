@@ -69,7 +69,6 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
       return;
     }
     if (_generated) return;
-
     setState(() => _generated = true);
 
     final settings = context.read<SettingsProvider>();
@@ -90,8 +89,7 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
     );
 
     if (bytes != null && mounted) {
-      final receipt = receiptProvider.lastReceipt!;
-      _showSuccessSheet(bytes, receipt);
+      _showSuccessSheet(bytes, receiptProvider.lastReceipt!);
     } else if (mounted) {
       setState(() => _generated = false);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -138,7 +136,9 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
             Text(
               '${receipt.tenantName} – ${receipt.month} ${receipt.year}',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurfaceVariant,
                   ),
             ),
             const SizedBox(height: 16),
@@ -151,39 +151,30 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
             ),
             const SizedBox(height: 28),
 
-            // Download / Print PDF
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () =>
-                    receiptProvider.downloadOrShare(bytes, filename: filename),
-                icon: const Icon(Icons.download),
-                label: const Text('Download / Print PDF'),
-              ),
-            ),
-            const SizedBox(height: 10),
-
             Row(
               children: [
                 Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: receipt.tenantEmail.isNotEmpty
-                        ? () => receiptProvider.shareViaEmail(
-                            receipt, bytes, filename)
-                        : null,
-                    icon: const Icon(Icons.email_outlined),
-                    label: const Text('Email + PDF'),
+                  child: ElevatedButton.icon(
+                    onPressed: () => receiptProvider.downloadOrShare(
+                        bytes,
+                        filename: filename),
+                    icon: const Icon(Icons.download),
+                    label: const Text('Download PDF'),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: OutlinedButton.icon(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF25D366),
+                      foregroundColor: Colors.white,
+                    ),
                     onPressed: () {
                       Navigator.pop(ctx);
                       receiptProvider.openWhatsApp(
                           receipt.tenantPhone, receipt);
                     },
-                    icon: const Icon(Icons.chat_outlined),
+                    icon: const Icon(Icons.chat),
                     label: const Text('WhatsApp'),
                   ),
                 ),
@@ -234,9 +225,11 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
                       items: tenants
                           .map((t) => DropdownMenuItem(
                               value: t,
-                              child: Text('${t.name} – ${t.houseName}')))
+                              child:
+                                  Text('${t.name} – ${t.houseName}')))
                           .toList(),
-                      onChanged: (t) => setState(() => _selectedTenant = t),
+                      onChanged: (t) =>
+                          setState(() => _selectedTenant = t),
                       validator: (v) =>
                           v == null ? 'Please select a tenant' : null,
                     ),
@@ -260,8 +253,8 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
                           flex: 2,
                           child: DropdownButtonFormField<String>(
                             value: _selectedMonth,
-                            decoration:
-                                const InputDecoration(labelText: 'Month'),
+                            decoration: const InputDecoration(
+                                labelText: 'Month'),
                             items: AppConstants.months
                                 .map((m) => DropdownMenuItem(
                                     value: m, child: Text(m)))
@@ -274,14 +267,14 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
                         Expanded(
                           child: DropdownButtonFormField<int>(
                             value: _selectedYear,
-                            decoration:
-                                const InputDecoration(labelText: 'Year'),
+                            decoration: const InputDecoration(
+                                labelText: 'Year'),
                             items: List.generate(
                               5,
                               (i) => DropdownMenuItem(
                                 value: now.year - 1 + i,
-                                child:
-                                    Text((now.year - 1 + i).toString()),
+                                child: Text(
+                                    (now.year - 1 + i).toString()),
                               ),
                             ),
                             onChanged: (y) =>
@@ -315,11 +308,13 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          mainAxisAlignment:
+                              MainAxisAlignment.spaceBetween,
                           children: [
                             const Text('Base Rent'),
                             Text(
-                              fmt.format(_selectedTenant!.monthlyRent),
+                              fmt.format(
+                                  _selectedTenant!.monthlyRent),
                               style: const TextStyle(
                                   fontWeight: FontWeight.bold),
                             ),
@@ -331,8 +326,9 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
                     CustomTextField(
                       label: 'Milk Charge (₹)',
                       controller: _milk,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(
+                              decimal: true),
                       prefixIcon: const Icon(Icons.local_drink),
                       inputFormatters: [
                         FilteringTextInputFormatter.allow(
@@ -344,8 +340,9 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
                     CustomTextField(
                       label: 'Electricity Charge (₹)',
                       controller: _electricity,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(
+                              decimal: true),
                       prefixIcon: const Icon(Icons.electric_bolt),
                       inputFormatters: [
                         FilteringTextInputFormatter.allow(
@@ -357,8 +354,9 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
                     CustomTextField(
                       label: 'Water Charge (₹)',
                       controller: _water,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(
+                              decimal: true),
                       prefixIcon: const Icon(Icons.water_drop),
                       inputFormatters: [
                         FilteringTextInputFormatter.allow(
@@ -370,8 +368,9 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
                     CustomTextField(
                       label: 'Other Charges (₹)',
                       controller: _other,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(
+                              decimal: true),
                       prefixIcon:
                           const Icon(Icons.miscellaneous_services),
                       inputFormatters: [
@@ -397,7 +396,8 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        mainAxisAlignment:
+                            MainAxisAlignment.spaceBetween,
                         children: [
                           Text('TOTAL',
                               style: TextStyle(
@@ -423,7 +423,8 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
             const SizedBox(height: 20),
 
             ElevatedButton.icon(
-              onPressed: (isGenerating || _generated) ? null : _generate,
+              onPressed:
+                  (isGenerating || _generated) ? null : _generate,
               icon: isGenerating
                   ? const SizedBox(
                       width: 20,
@@ -431,8 +432,9 @@ class _GenerateReceiptScreenState extends State<GenerateReceiptScreen> {
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.picture_as_pdf),
-              label: Text(
-                  isGenerating ? 'Generating...' : 'Generate Receipt'),
+              label: Text(isGenerating
+                  ? 'Generating...'
+                  : 'Generate Receipt'),
             ),
             const SizedBox(height: 32),
           ],
