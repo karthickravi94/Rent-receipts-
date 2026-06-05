@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:printing/printing.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/receipt.dart';
 import '../models/tenant.dart';
@@ -111,6 +112,7 @@ class ReceiptProvider extends ChangeNotifier {
       final bytes =
           await _pdfService.generateReceipt(receipt, adminName, adminPhone);
       _lastPdfBytes = bytes;
+      _lastReceipt = receipt;
       final safeName =
           receipt.tenantName.replaceAll(RegExp(r'[^\w]'), '_');
       _lastPdfFilename =
@@ -132,7 +134,45 @@ class ReceiptProvider extends ChangeNotifier {
     );
   }
 
-  Future<void> shareViaEmail(Receipt receipt, String email) async {
+  // Shares PDF via native share sheet (iOS/Android) so user can pick Mail
+  // and get the PDF attached. Falls back to download + mailto on desktop.
+  Future<void> shareViaEmail(
+      Receipt receipt, Uint8List bytes, String filename) async {
+    final subject = 'Rent Receipt - ${receipt.month} ${receipt.year}';
+    final body = _buildEmailBody(receipt);
+
+    bool sharedWithFile = false;
+
+    if (kIsWeb) {
+      try {
+        final xFile =
+            XFile.fromData(bytes, mimeType: 'application/pdf', name: filename);
+        await Share.shareXFiles([xFile], subject: subject, text: body);
+        sharedWithFile = true;
+      } catch (_) {
+        // Web Share API with files not supported; fall through
+      }
+    } else {
+      final xFile =
+          XFile.fromData(bytes, mimeType: 'application/pdf', name: filename);
+      await Share.shareXFiles([xFile], subject: subject, text: body);
+      sharedWithFile = true;
+    }
+
+    if (!sharedWithFile) {
+      // Desktop fallback: download the PDF then open email client
+      await Printing.sharePdf(bytes: bytes, filename: filename);
+      if (receipt.tenantEmail.isNotEmpty) {
+        final encodedSubject = Uri.encodeComponent(subject);
+        final encodedBody = Uri.encodeComponent(body);
+        final uri = Uri.parse(
+            'mailto:${receipt.tenantEmail}?subject=$encodedSubject&body=$encodedBody');
+        if (await canLaunchUrl(uri)) await launchUrl(uri);
+      }
+    }
+  }
+
+  String _buildEmailBody(Receipt receipt) {
     final lines = [
       'Dear ${receipt.tenantName},',
       '',
@@ -151,21 +191,13 @@ class ReceiptProvider extends ChangeNotifier {
       '',
       'TOTAL AMOUNT DUE: Rs.${receipt.totalAmount.toStringAsFixed(2)}',
       '',
-      if (receipt.gpayNumber.isNotEmpty)
-        'GPay: ${receipt.gpayNumber}',
+      if (receipt.gpayNumber.isNotEmpty) 'GPay: ${receipt.gpayNumber}',
       if (receipt.phonePeNumber.isNotEmpty)
         'PhonePe: ${receipt.phonePeNumber}',
       '',
-      'To download the PDF receipt, visit the Rent Receipt Manager app.',
-      '',
       'Regards',
     ];
-
-    final subject = Uri.encodeComponent(
-        'Rent Receipt - ${receipt.month} ${receipt.year}');
-    final body = Uri.encodeComponent(lines.join('\n'));
-    final uri = Uri.parse('mailto:$email?subject=$subject&body=$body');
-    if (await canLaunchUrl(uri)) await launchUrl(uri);
+    return lines.join('\n');
   }
 
   Future<void> openWhatsApp(String phone, Receipt receipt) async {
