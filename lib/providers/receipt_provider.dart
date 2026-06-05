@@ -16,12 +16,14 @@ class ReceiptProvider extends ChangeNotifier {
   String? _error;
   Uint8List? _lastPdfBytes;
   String _lastPdfFilename = 'rent_receipt.pdf';
+  Receipt? _lastReceipt;
 
   List<Receipt> get receipts => _receipts;
   bool get isGenerating => _isGenerating;
   String? get error => _error;
   Uint8List? get lastPdfBytes => _lastPdfBytes;
   String get lastPdfFilename => _lastPdfFilename;
+  Receipt? get lastReceipt => _lastReceipt;
 
   ReceiptProvider() {
     _firestoreService.getReceipts().listen(
@@ -83,6 +85,7 @@ class ReceiptProvider extends ChangeNotifier {
       );
 
       await _firestoreService.addReceipt(receipt);
+      _lastReceipt = receipt;
 
       final safeName = tenant.name.replaceAll(RegExp(r'[^\w]'), '_');
       _lastPdfFilename = 'receipt_${safeName}_${month}_$year.pdf';
@@ -122,9 +125,6 @@ class ReceiptProvider extends ChangeNotifier {
     }
   }
 
-  // Works on all platforms:
-  //   Web   → downloads the PDF file to the browser downloads folder
-  //   Mobile → opens native share sheet (WhatsApp, Drive, Email, etc.)
   Future<void> downloadOrShare(Uint8List bytes, {String? filename}) async {
     await Printing.sharePdf(
       bytes: bytes,
@@ -132,29 +132,63 @@ class ReceiptProvider extends ChangeNotifier {
     );
   }
 
-  // Opens the device/browser mail client with pre-filled subject & body.
   Future<void> shareViaEmail(Receipt receipt, String email) async {
-    final uri = Uri(
-      scheme: 'mailto',
-      path: email,
-      queryParameters: {
-        'subject': 'Rent Receipt – ${receipt.month} ${receipt.year}',
-        'body':
-            'Dear ${receipt.tenantName},\n\n'
-            'Please find your rent receipt for ${receipt.month} ${receipt.year}.\n\n'
-            'Total Amount Due: ₹${receipt.totalAmount.toStringAsFixed(2)}\n\n'
-            'Regards',
-      },
-    );
+    final lines = [
+      'Dear ${receipt.tenantName},',
+      '',
+      'Please find your rent receipt for ${receipt.month} ${receipt.year}.',
+      '',
+      'House: ${receipt.houseName}',
+      'Base Rent: Rs.${receipt.rentAmount.toStringAsFixed(2)}',
+      if (receipt.milkCharge > 0)
+        'Milk Charge: Rs.${receipt.milkCharge.toStringAsFixed(2)}',
+      if (receipt.electricityCharge > 0)
+        'Electricity: Rs.${receipt.electricityCharge.toStringAsFixed(2)}',
+      if (receipt.waterCharge > 0)
+        'Water Charge: Rs.${receipt.waterCharge.toStringAsFixed(2)}',
+      if (receipt.otherCharges > 0)
+        'Other Charges: Rs.${receipt.otherCharges.toStringAsFixed(2)}',
+      '',
+      'TOTAL AMOUNT DUE: Rs.${receipt.totalAmount.toStringAsFixed(2)}',
+      '',
+      if (receipt.gpayNumber.isNotEmpty)
+        'GPay: ${receipt.gpayNumber}',
+      if (receipt.phonePeNumber.isNotEmpty)
+        'PhonePe: ${receipt.phonePeNumber}',
+      '',
+      'To download the PDF receipt, visit the Rent Receipt Manager app.',
+      '',
+      'Regards',
+    ];
+
+    final subject = Uri.encodeComponent(
+        'Rent Receipt - ${receipt.month} ${receipt.year}');
+    final body = Uri.encodeComponent(lines.join('\n'));
+    final uri = Uri.parse('mailto:$email?subject=$subject&body=$body');
     if (await canLaunchUrl(uri)) await launchUrl(uri);
   }
 
-  // On web: opens WhatsApp Web. On mobile: opens WhatsApp app.
   Future<void> openWhatsApp(String phone, Receipt receipt) async {
-    final msg = Uri.encodeComponent(
-        'Hi ${receipt.tenantName}, your rent receipt for '
-        '${receipt.month} ${receipt.year} is ready. '
-        'Total: ₹${receipt.totalAmount.toStringAsFixed(2)}');
+    final lines = [
+      'Hi ${receipt.tenantName},',
+      '',
+      'Your rent receipt for ${receipt.month} ${receipt.year} is ready.',
+      '',
+      'House: ${receipt.houseName}',
+      'Base Rent: Rs.${receipt.rentAmount.toStringAsFixed(2)}',
+      if (receipt.milkCharge > 0)
+        'Milk: Rs.${receipt.milkCharge.toStringAsFixed(2)}',
+      if (receipt.electricityCharge > 0)
+        'Electricity: Rs.${receipt.electricityCharge.toStringAsFixed(2)}',
+      if (receipt.waterCharge > 0)
+        'Water: Rs.${receipt.waterCharge.toStringAsFixed(2)}',
+      if (receipt.otherCharges > 0)
+        'Other: Rs.${receipt.otherCharges.toStringAsFixed(2)}',
+      '',
+      'Total: Rs.${receipt.totalAmount.toStringAsFixed(2)}',
+    ];
+
+    final msg = Uri.encodeComponent(lines.join('\n'));
     final uri = Uri.parse('https://wa.me/$phone?text=$msg');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
